@@ -1,36 +1,116 @@
 #!/bin/bash
 
+# ============================================================
 # Grafana Enterprise Installation Script
-# Standard paths: /etc/grafana (config), /var/lib/grafana (data)
-# Version: 12.2.1
+# Ubuntu / Debian
+# ============================================================
 
 set -e
 
-# Variables
-GRAFANA_VERSION="12.2.1"
-DOWNLOAD_URL="https://dl.grafana.com/grafana-enterprise/release/${GRAFANA_VERSION}/grafana-enterprise_${GRAFANA_VERSION}_18655849634_linux_amd64.deb"
-DEB_FILE="grafana-enterprise_${GRAFANA_VERSION}_18655849634_linux_amd64.deb"
+GRAFANA_REPO="https://apt.grafana.com"
 SERVICE="grafana-server"
 
-# Update system
-sudo apt update && sudo apt upgrade -y
+echo "=========================================="
+echo " Installing Grafana Enterprise"
+echo "=========================================="
 
-# Install dependencies
-sudo apt-get install -y adduser libfontconfig1 musl
+# ------------------------------------------------------------
+# 1. Update system
+# ------------------------------------------------------------
 
-# Download package
-wget "${DOWNLOAD_URL}"
+echo "[1/7] Updating system..."
 
-# Install package
-sudo dpkg -i "${DEB_FILE}"
+sudo apt-get update -y
 
-# Reload, enable, and start service
+# ------------------------------------------------------------
+# 2. Install dependencies
+# ------------------------------------------------------------
+
+echo "[2/7] Installing dependencies..."
+
+sudo apt-get install -y \
+    apt-transport-https \
+    software-properties-common \
+    wget \
+    gnupg \
+    ca-certificates \
+    adduser \
+    libfontconfig1 \
+    musl
+
+# ------------------------------------------------------------
+# 3. Add Grafana GPG key
+# ------------------------------------------------------------
+
+echo "[3/7] Adding Grafana repository key..."
+
+sudo mkdir -p /etc/apt/keyrings
+
+wget -q -O - https://apt.grafana.com/gpg.key | \
+    gpg --dearmor | \
+    sudo tee /etc/apt/keyrings/grafana.gpg > /dev/null
+
+sudo chmod 644 /etc/apt/keyrings/grafana.gpg
+
+# ------------------------------------------------------------
+# 4. Add Grafana repository
+# ------------------------------------------------------------
+
+echo "[4/7] Adding Grafana repository..."
+
+echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] ${GRAFANA_REPO} stable main" | \
+    sudo tee /etc/apt/sources.list.d/grafana.list > /dev/null
+
+sudo apt-get update -y
+
+# ------------------------------------------------------------
+# 5. Install Grafana Enterprise
+# ------------------------------------------------------------
+
+echo "[5/7] Installing Grafana Enterprise..."
+
+sudo apt-get install -y grafana-enterprise
+
+# ------------------------------------------------------------
+# 6. Enable and start Grafana
+# ------------------------------------------------------------
+
+echo "[6/7] Starting Grafana..."
+
 sudo systemctl daemon-reload
-sudo systemctl enable "${SERVICE}"
-sudo systemctl start "${SERVICE}"
 
-echo "Grafana Enterprise installed successfully!"
-echo " - Config: /etc/grafana/grafana.ini"
-echo " - Data: /var/lib/grafana/"
-echo " - Service: systemctl status ${SERVICE}"
-echo "Access Grafana UI at http://GrafanaIP:3000 (default admin/admin)"
+sudo systemctl enable grafana-server
+
+sudo systemctl start grafana-server
+
+# ------------------------------------------------------------
+# 7. Verify installation
+# ------------------------------------------------------------
+
+echo "[7/7] Checking Grafana service..."
+
+if sudo systemctl is-active --quiet grafana-server; then
+    echo ""
+    echo "=========================================="
+    echo " Grafana installed successfully!"
+    echo "=========================================="
+    echo ""
+    echo "Config : /etc/grafana/grafana.ini"
+    echo "Data   : /var/lib/grafana/"
+    echo "Logs   : /var/log/grafana/"
+    echo "Service: grafana-server"
+    echo ""
+    echo "Check status:"
+    echo "sudo systemctl status grafana-server"
+    echo ""
+    echo "Grafana runs on:"
+    echo "http://YOUR_SERVER_IP:3000"
+    echo ""
+else
+    echo ""
+    echo "ERROR: Grafana service failed to start."
+    echo ""
+    echo "Check logs with:"
+    echo "sudo journalctl -u grafana-server -xe"
+    exit 1
+fi
